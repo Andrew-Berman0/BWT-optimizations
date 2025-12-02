@@ -1,3 +1,20 @@
+INSTRUCTIONS FOR USE
+----------------------------------------
+This project is splite between 6 python files. BwtConst is the class that constructs the actual bwt using the Manber Myers algorithm to constsruct the bwt in O(nlog^2n). since this project is not a measure of the optimizations for constructing the bwt, i decided to use the same pre constructed bwt for every pattern matching optimization. 
+
+the optimizations are split into:
+
+1. bwtWaveletTree.py for the implementation of a Wavelet tree
+2. bwtBD.py for a Bi-directional FM-index
+3. bwtOCC.py for a compressed/checkpointed OCC table
+
+ive also included a plain, non optimized version that just uses a 1 directional FM index called:
+
+bwtPlain.py
+
+to run this test simply go to main.py and hit 'run'. this will test all classes with an N of (10,000), (100,000), and (1,000,000). for these tests the randomly generated patterns that we will be trying to match are 10 chars long and we default generate 100 of them. these values can be modified at the bottom of main.py. The results of the build time, memory usage, and search time will all be printed in the terminal for all values of N and for all optimizations. 
+
+----------------------------------------
 1. Background
 Modern sequence aligners, such as BWA, Bowtie, and SOAP2, utilize the Burrows–Wheeler Transform (BWT) and its FM-index to perform substring searches within genomes. The FM-index enables pattern matching in time proportional to the query length rather than the genome size, which is important for large-scale alignment tasks. However, when genomes become larger and data grows, even FM-index–based searches can become bottlenecks. Optimizing the data structures and access patterns used in BWT-based searching can significantly reduce alignment times and memory usage. This project aims to find performance optimizations beyond the base FM-index implementation, benchmark them, and visualize their effects on alignment speed across genomes of different sizes.
 2. Project Objectives
