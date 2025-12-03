@@ -6,35 +6,21 @@ from bwtPlain import FMIndexPlain
 
 import time as t
 import random as r
-import tracemalloc  # <--- NEW LIBRARY
+import tracemalloc
+import matplotlib.pyplot as plt
+import numpy as np
+import collections
 
 # -----------------------------
-# Helper for Measuring Memory & Time
+# Helper for Measuring Memory and Time (Unchanged)
 # -----------------------------
 def measure_construction(class_constructor, *args):
-    """
-    Runs a constructor, measures execution time, 
-    and captures the net memory increase (Object Size).
-    """
-    # 1. Start Memory Tracking
     tracemalloc.start()
-    
-    # 2. Snapshot time
     start_time = t.perf_counter()
-    
-    # 3. Build the object
     obj = class_constructor(*args)
-    
-    # 4. Snapshot time
     end_time = t.perf_counter()
-    
-    # 5. Get Memory Usage (current, peak)
-    # We care about 'current' (how much memory the object is holding right now)
     current_mem, peak_mem = tracemalloc.get_traced_memory()
-    
-    # 6. Stop Tracking
     tracemalloc.stop()
-    
     time_taken = end_time - start_time
     return obj, time_taken, current_mem
 
@@ -48,7 +34,6 @@ def backward_search_bwt(pattern, bwt_obj):
     l, r = 0, len(bwt_obj.bwt) - 1
     for c in reversed(pattern):
         if c not in bwt_obj.C: return False
-        # Note: This relies on the full OCC table being in bwt_obj
         l = bwt_obj.C[c] + (bwt_obj.OCC[c][l-1] if l > 0 else 0) 
         r = bwt_obj.C[c] + bwt_obj.OCC[c][r] - 1
         if l > r: return False
@@ -80,16 +65,79 @@ def backward_search_bifm(pattern, bifm_obj):
     return True
 
 def backward_search_plain(pattern, plain_obj):
-    # This relies on the Plain object having the backward_search method
     return plain_obj.backward_search(pattern)
 
 # -----------------------------
-# Main Execution
+# Plotting Function (FIXED)
+# -----------------------------
+def plot_results(results_data, filename="bwt_optimization_benchmarks.png", num_patterns=100):
+    """Generates and saves a three-panel plot of the benchmark results."""
+    
+    # Organize data by structure name
+    data_by_structure = collections.defaultdict(lambda: collections.defaultdict(list))
+    for entry in results_data:
+        name = entry['Structure']
+        size = entry['Size']
+        data_by_structure[name]['Size'].append(size)
+        data_by_structure[name]['BuildTime'].append(entry['BuildTime'])
+        data_by_structure[name]['MemoryKB'].append(entry['MemoryKB'])
+        data_by_structure[name]['SearchTime'].append(entry['SearchTime'])
+
+    # Setup the figure
+    fig, axes = plt.subplots(3, 1, figsize=(10, 15))
+    fig.suptitle('BWT Index Performance & Resource Usage', fontsize=16)
+
+    # --- Plot 1: Build Time ---
+    ax = axes[0]
+    for name, data in data_by_structure.items():
+        ax.plot(data['Size'], data['BuildTime'], marker='o', label=name)
+    ax.set_title('Construction Time vs. Genome Size')
+    ax.set_xlabel('Genome Size (N)', fontsize=10)
+    ax.set_ylabel('Build Time (seconds)', fontsize=10)
+    ax.legend(fontsize=8)
+    ax.grid(True, linestyle='--')
+    ax.ticklabel_format(axis='x', style='plain')
+
+    # --- Plot 2: Memory Usage ---
+    ax = axes[1]
+    for name, data in data_by_structure.items():
+        # Mask zero memory values for log scale
+        memory_data = np.array(data['MemoryKB'])
+        memory_data[memory_data <= 0] = 0.01 
+        ax.plot(data['Size'], memory_data, marker='o', label=name)
+        
+    ax.set_title('Memory Usage vs. Genome Size (Log Scale)')
+    ax.set_xlabel('Genome Size (N)', fontsize=10)
+    ax.set_ylabel('Peak Memory (Kilobytes)', fontsize=10)
+    ax.set_yscale('log') # Use log scale to clearly show difference between Plain and Compressed
+    ax.legend(fontsize=8)
+    ax.grid(True, linestyle='--')
+    ax.ticklabel_format(axis='x', style='plain')
+
+    # --- Plot 3: Search Time (FIXED Y-AXIS LABEL) ---
+    ax = axes[2]
+    for name, data in data_by_structure.items():
+        ax.plot(data['Size'], data['SearchTime'], marker='o', label=name)
+    ax.set_title('Average Search Time vs. Genome Size')
+    ax.set_xlabel('Genome Size (N)', fontsize=10)
+    ax.set_ylabel(f'Search Time (s) for {num_patterns} Patterns', fontsize=10) # <-- FIX HERE
+    ax.legend(fontsize=8)
+    ax.grid(True, linestyle='--')
+    ax.ticklabel_format(axis='x', style='plain')
+    
+    plt.tight_layout(rect=[0, 0.03, 1, 0.97])
+    plt.savefig(filename)
+    print(f"\n[SUCCESS] Benchmark results saved to {filename}")
+
+# -----------------------------
+# Main Execution (FIXED PLOT CALL)
 # -----------------------------
 if __name__ == "__main__":
-    genome_sizes = [10000, 100000, 1000000] 
+    genome_sizes = [10000, 100000, 500000] # Increased 500k back for better visualization
     pattern_length = 10
     num_patterns = 100
+    
+    all_results = [] # Stores data for plotting
 
     # Table Header
     print(f"{'Structure':<15} | {'Size':<8} | {'Build Time':<10} | {'Memory (KB)':<12} | {'Search Time':<10}")
@@ -99,27 +147,20 @@ if __name__ == "__main__":
         # Generate random genome string
         s = ''.join(r.choice('ACGT') for _ in range(size))
 
-        # --- CORRECTLY MEASURE THE PLAIN FM INDEX COST (bwtConst) ---
-        # 1. Measure the BWT Construction Time and Memory
+        # --- MEASURE THE PLAIN FM INDEX COST (bwtConst) ---
         tracemalloc.start()
         start_build_plain = t.perf_counter()
-
-        # This allocation creates the huge OCC table (the Plain FM Index data)
         bwt_obj = bwtConst(s) 
-
         end_build_plain = t.perf_counter()
-        plain_mem_usage, _ = tracemalloc.get_traced_memory() # Current memory usage is the key
+        plain_mem_usage, _ = tracemalloc.get_traced_memory() 
         tracemalloc.stop()
 
         plain_build_time = end_build_plain - start_build_plain
         # -------------------------------------------------------------
 
         # List of strategies to test
-        # Note: We now treat bwt_obj as the base Plain FM Index object
         strategies = [
-            # 1. PLAIN INDEX (Base object is the index)
             ("FMIndexPlain", lambda: bwt_obj, (None,), backward_search_bwt, plain_build_time, plain_mem_usage),
-            # 2. OPTIMIZED INDICES (Must be built on top of bwt_obj)
             ("OCCCompressed", OCCCompressed, (bwt_obj, 16), backward_search_occ, 0, 0),
             ("WaveletTree", WaveletTree, (bwt_obj,), backward_search_wavelet, 0, 0),
             ("BiFMIndex", BiFMIndex, (bwt_obj,), backward_search_bifm, 0, 0),
@@ -127,27 +168,27 @@ if __name__ == "__main__":
 
         for name, cls, args, search_func, pre_time, pre_mem in strategies:
             
+            result_entry = {'Structure': name, 'Size': size}
+            
             # A. Measure Construction (Time + Memory)
             if name == "FMIndexPlain":
-                # Use the pre-measured values for the base object
                 obj = bwt_obj
                 build_time = pre_time
                 mem_usage = pre_mem
             else:
-                # Measure the new memory and time added by the compressed index
                 obj, build_time, mem_usage = measure_construction(cls, *args)
-                # The memory reported here is just the COMPRESSED structure's new size
                 
+            result_entry['BuildTime'] = build_time
+            result_entry['MemoryKB'] = mem_usage / 1024
+
             # B. Measure Search Speed
             matches_found = 0
             patterns = [random_pattern(pattern_length) for _ in range(num_patterns)]
             
             start_search = t.perf_counter()
             for pat in patterns:
-                # NOTE: For FMIndexPlain, we must use backward_search_bwt 
-                # because the base bwt_obj does not have the 'backward_search' method
-                if name == "FMIndexPlain" and search_func == backward_search_plain:
-                    # Reroute to the function that uses the bwtConst's OCC table
+                # Handle search function routing
+                if name == "FMIndexPlain":
                     if backward_search_bwt(pat, obj):
                         matches_found += 1
                 else:
@@ -156,10 +197,15 @@ if __name__ == "__main__":
                         
             end_search = t.perf_counter()
             search_time = end_search - start_search
+            result_entry['SearchTime'] = search_time
 
-            # Convert Bytes to KB
-            mem_kb = mem_usage / 1024
-
-            print(f"{name:<15} | {size:<8} | {build_time:.5f}s   | {mem_kb:<12.2f} | {search_time:.5f}s")
+            all_results.append(result_entry)
+            
+            # Print to console
+            print(f"{name:<15} | {size:<8} | {build_time:.5f}s   | {mem_usage / 1024:<12.2f} | {search_time:.5f}s")
         
         print("-" * 75)
+        
+    # Generate the graphical output (FIXED CALL)
+    if all_results:
+        plot_results(all_results, num_patterns=num_patterns)
